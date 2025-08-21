@@ -195,3 +195,68 @@
           (map-set beneficiaries { id: beneficiary-id }
             (merge beneficiary { received-amount: (+ (get received-amount beneficiary) amount) })
           )
+          (map-set donations { id: (+ (var-get donation-count) u1) } {
+            donor: tx-sender,
+            beneficiary-id: beneficiary-id,
+            amount: amount,
+            timestamp: stacks-block-height,
+          })
+          (var-set donation-count (+ (var-get donation-count) u1))
+          (ok true)
+        )
+        error
+        ERR-INSUFFICIENT-FUNDS
+      )
+      ERR-INVALID-INPUT
+    )
+  )
+)
+
+;; Retrieve donation details by ID
+(define-read-only (get-donation-by-id (donation-id uint))
+  (match (map-get? donations { id: donation-id })
+    donation (ok donation)
+    ERR-NOT-FOUND
+  )
+)
+
+;; Get total donation count
+(define-read-only (get-donation-count)
+  (ok (var-get donation-count))
+)
+
+;; FUND UTILIZATION & MILESTONE MANAGEMENT
+
+;; Create new fund utilization proposal (Admin only)
+(define-public (add-utilization
+    (beneficiary-id uint)
+    (description (string-utf8 255))
+    (amount uint)
+  )
+  (let ((beneficiary (unwrap! (get-beneficiary beneficiary-id) ERR-BENEFICIARY-NOT-FOUND)))
+    (if (and
+        (is-authorized tx-sender ROLE-ADMIN)
+        (> (len description) u0)
+        (> amount u0)
+        (< beneficiary-id (var-get beneficiary-count))
+      )
+      (let (
+          (milestone (+ (get-last-milestone beneficiary-id) u1))
+          (utilization-id (+ (var-get utilization-count) u1))
+        )
+        (begin
+          (map-set utilization { id: utilization-id } {
+            beneficiary-id: beneficiary-id,
+            milestone: milestone,
+            description: description,
+            amount: amount,
+            status: "pending",
+          })
+          (var-set utilization-count utilization-id)
+          (ok milestone)
+        )
+      )
+      ERR-INVALID-INPUT
+    )
+  )
+)
